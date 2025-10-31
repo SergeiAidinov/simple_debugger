@@ -52,11 +52,18 @@ public class SimpleDebugger {
 		Set<ClassLoaderReference> classSet = classes.stream().map(c -> c.classLoader()).collect(Collectors.toSet());
 		classSet.stream().filter(c -> Objects.nonNull(c)).map(c -> c.toString()).forEach(c -> System.out.println("==> " + c));
 		Set<ClassLoaderReference> qq = classSet.stream().filter(c -> Objects.nonNull(c)).collect(Collectors.toSet());
+		List<ReferenceType> targetClasses = null;
 		for (ClassLoaderReference classLoaderReference : qq) {
-			 classLoaderReference.visibleClasses().stream()
-			 //.filter(cl -> cl.equals("class target.Target (loaded by instance of java.net.URLClassLoader(id=927))"))
-			 .forEach(cl -> System.out.println(cl));
+			 targetClasses = classLoaderReference.visibleClasses().stream()
+			 .filter(cl -> cl.toString().contains("target.Target"))
+			 .collect(Collectors.toList());
 		}
+		ReferenceType targetClass = targetClasses.get(0);
+		Method method = targetClass.methodsByName("sayHello").get(0);
+		//Method method = targetClass.get().methodsByName("sayHello").get(0);
+		Location location = method.location();
+		BreakpointRequest bpReq = erm.createBreakpointRequest(location);
+		bpReq.enable();
 		//System.out.println("==> " + classes.get(0).getClass().getCanonicalName());
 		//classes.stream().forEach(c -> System.out.println(c.getClass()));
 		//classSet.stream().forEach(c -> System.out.println(c.getClass()));
@@ -71,24 +78,24 @@ public class SimpleDebugger {
 //		BreakpointRequest bpReq = erm.createBreakpointRequest(location);
 //		bpReq.enable();
 //
-//		EventQueue queue = vm.eventQueue();
-//
-//		System.out.println("Waiting for events...");
-//
-//		while (true) {
-//			EventSet eventSet = null;
-//			try {
-//				eventSet = queue.remove();
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//			for (Event event : eventSet) {
-//				if (event instanceof BreakpointEvent be) {
-//					System.out.println("Breakpoint hit at method: " + be.location().method().name());
-//					vm.resume(); // продолжить Target
-//				}
-//			}
-//		}
+		EventQueue queue = vm.eventQueue();
+
+		System.out.println("Waiting for events...");
+
+		while (true) {
+			EventSet eventSet = null;
+			try {
+				eventSet = queue.remove();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			for (Event event : eventSet) {
+				if (event instanceof BreakpointEvent be) {
+					System.out.println("Breakpoint hit at method: " + be.location().method().name());
+					vm.resume(); // продолжить Target
+				}
+			}
+		}
 	}
 }

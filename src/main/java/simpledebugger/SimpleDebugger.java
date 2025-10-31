@@ -9,9 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 public class SimpleDebugger {
-	public static void main(String[] args) throws InterruptedException {
+	public static void main(String[] args) throws InterruptedException, AbsentInformationException {
 		String host = args.length > 0 ? args[0] : "localhost";
 		int port = args.length > 1 ? Integer.parseInt(args[1]) : 5005;
 
@@ -46,36 +49,46 @@ public class SimpleDebugger {
 			classes = vm.allClasses();
 		}
 		System.out.println(classes.size());
-		classes.stream().forEach(c -> System.out.println(c.getClass()));
-		List<ReferenceType> selectedClasses = classes.stream().filter(c -> c.getClass().toString().contains("tar")).toList();
-		selectedClasses.stream().forEach(c -> System.out.println("SELECTED: " + c.getClass()));
-		Optional<ReferenceType> targetClass = classes.stream().filter(c -> c.getClass().toString().contains("tar")).findAny();
-		targetClass.ifPresentOrElse(c -> System.out.println(c + "  FOUND"), () -> System.out.println(" NOT FOUND"));
+		Set<ClassLoaderReference> classSet = classes.stream().map(c -> c.classLoader()).collect(Collectors.toSet());
+		classSet.stream().filter(c -> Objects.nonNull(c)).map(c -> c.toString()).forEach(c -> System.out.println("==> " + c));
+		Set<ClassLoaderReference> qq = classSet.stream().filter(c -> Objects.nonNull(c)).collect(Collectors.toSet());
+		for (ClassLoaderReference classLoaderReference : qq) {
+			 classLoaderReference.visibleClasses().stream()
+			 //.filter(cl -> cl.equals("class target.Target (loaded by instance of java.net.URLClassLoader(id=927))"))
+			 .forEach(cl -> System.out.println(cl));
+		}
+		//System.out.println("==> " + classes.get(0).getClass().getCanonicalName());
+		//classes.stream().forEach(c -> System.out.println(c.getClass()));
+		//classSet.stream().forEach(c -> System.out.println(c.getClass()));
+		//List<ReferenceType> selectedClasses = classes.stream().filter(c -> c.getClass().toString().contains("tar")).toList();
+		//selectedClasses.stream().forEach(c -> System.out.println("SELECTED: " + c.getClass()));
+		//Optional<ReferenceType> targetClass = classes.stream().filter(c -> c.getClass().toString().contains("tar")).findAny();
+		//targetClass.ifPresentOrElse(c -> System.out.println(c + "  FOUND"), () -> System.out.println(" NOT FOUND"));
 		//ReferenceType targetClass = classes.get(0);
 		//Method method = targetClass.methodsByName("sayHello").get(0);
-		Method method = targetClass.get().methodsByName("sayHello").get(0);
-		Location location = method.location();
-		BreakpointRequest bpReq = erm.createBreakpointRequest(location);
-		bpReq.enable();
-
-		EventQueue queue = vm.eventQueue();
-
-		System.out.println("Waiting for events...");
-
-		while (true) {
-			EventSet eventSet = null;
-			try {
-				eventSet = queue.remove();
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			for (Event event : eventSet) {
-				if (event instanceof BreakpointEvent be) {
-					System.out.println("Breakpoint hit at method: " + be.location().method().name());
-					vm.resume(); // продолжить Target
-				}
-			}
-		}
+//		Method method = targetClass.get().methodsByName("sayHello").get(0);
+//		Location location = method.location();
+//		BreakpointRequest bpReq = erm.createBreakpointRequest(location);
+//		bpReq.enable();
+//
+//		EventQueue queue = vm.eventQueue();
+//
+//		System.out.println("Waiting for events...");
+//
+//		while (true) {
+//			EventSet eventSet = null;
+//			try {
+//				eventSet = queue.remove();
+//			} catch (InterruptedException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+//			for (Event event : eventSet) {
+//				if (event instanceof BreakpointEvent be) {
+//					System.out.println("Breakpoint hit at method: " + be.location().method().name());
+//					vm.resume(); // продолжить Target
+//				}
+//			}
+//		}
 	}
 }

@@ -8,9 +8,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 public class SimpleDebugger {
@@ -39,8 +37,6 @@ public class SimpleDebugger {
 		}
 		System.out.println("Connected to VM: " + vm.name());
 		EventRequestManager erm = vm.eventRequestManager();
-		// Найдём метод sayHello и поставим Breakpoint
-		//List<ReferenceType> classes = vm.classesByName("target.Target");
 		List<ReferenceType> classes = vm.allClasses();
 		if (classes.isEmpty()) {
 			System.out.println("Target class not loaded yet. Waiting...");
@@ -60,26 +56,10 @@ public class SimpleDebugger {
 		}
 		ReferenceType targetClass = targetClasses.get(0);
 		Method method = targetClass.methodsByName("sayHello").get(0);
-		//Method method = targetClass.get().methodsByName("sayHello").get(0);
 		Location location = method.location();
 		BreakpointRequest bpReq = erm.createBreakpointRequest(location);
 		bpReq.enable();
-		//System.out.println("==> " + classes.get(0).getClass().getCanonicalName());
-		//classes.stream().forEach(c -> System.out.println(c.getClass()));
-		//classSet.stream().forEach(c -> System.out.println(c.getClass()));
-		//List<ReferenceType> selectedClasses = classes.stream().filter(c -> c.getClass().toString().contains("tar")).toList();
-		//selectedClasses.stream().forEach(c -> System.out.println("SELECTED: " + c.getClass()));
-		//Optional<ReferenceType> targetClass = classes.stream().filter(c -> c.getClass().toString().contains("tar")).findAny();
-		//targetClass.ifPresentOrElse(c -> System.out.println(c + "  FOUND"), () -> System.out.println(" NOT FOUND"));
-		//ReferenceType targetClass = classes.get(0);
-		//Method method = targetClass.methodsByName("sayHello").get(0);
-//		Method method = targetClass.get().methodsByName("sayHello").get(0);
-//		Location location = method.location();
-//		BreakpointRequest bpReq = erm.createBreakpointRequest(location);
-//		bpReq.enable();
-//
 		EventQueue queue = vm.eventQueue();
-
 		System.out.println("Waiting for events...");
 
 		while (true) {

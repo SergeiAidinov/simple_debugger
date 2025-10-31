@@ -1,0 +1,1 @@
+java -jar s_deb.jar localhost 5005

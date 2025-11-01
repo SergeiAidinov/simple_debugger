@@ -1,0 +1,125 @@
+package simpledebugger;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.sun.jdi.Bootstrap;
+import com.sun.jdi.ClassLoaderReference;
+import com.sun.jdi.Location;
+import com.sun.jdi.Method;
+import com.sun.jdi.ReferenceType;
+import com.sun.jdi.VirtualMachine;
+import com.sun.jdi.VirtualMachineManager;
+import com.sun.jdi.connect.AttachingConnector;
+import com.sun.jdi.connect.Connector;
+import com.sun.jdi.connect.IllegalConnectorArgumentsException;
+import com.sun.jdi.event.BreakpointEvent;
+import com.sun.jdi.event.Event;
+import com.sun.jdi.event.EventQueue;
+import com.sun.jdi.event.EventSet;
+import com.sun.jdi.request.BreakpointRequest;
+import com.sun.jdi.request.EventRequestManager;
+
+public class SimpleDebuggerWorkFlow {
+
+	private static SimpleDebuggerWorkFlow simpleDebuggerWorkFlow = null;
+	private VirtualMachine virtualMachine = null;
+	private List<ReferenceType> referencesAtClasses;
+
+	private SimpleDebuggerWorkFlow() {
+
+	}
+
+	public static SimpleDebuggerWorkFlow instance() {
+		if (Objects.isNull(simpleDebuggerWorkFlow))
+			simpleDebuggerWorkFlow = new SimpleDebuggerWorkFlow();
+		return simpleDebuggerWorkFlow;
+	}
+
+	public void debug(String host, int port) throws IOException {
+		configureVirtualMachine(host, port);
+		System.out.println("Connected to VM: " + virtualMachine.name());
+		createReferencesToClassesOfTargetApplication();
+
+		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
+
+		ReferenceType targetClass = referencesAtClasses.get(0);
+		Method method = targetClass.methodsByName("sayHello").get(0);
+		Location location = method.location();
+		BreakpointRequest bpReq = eventRequestManager.createBreakpointRequest(location);
+		bpReq.enable();
+		EventQueue queue = virtualMachine.eventQueue();
+		System.out.println("Waiting for events...");
+
+		while (true) {
+			EventSet eventSet = null;
+			try {
+				eventSet = queue.remove();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			for (Event event : eventSet) {
+				if (event instanceof BreakpointEvent be) {
+					System.out.println("Breakpoint hit at method: " + be.location().method().name());
+					virtualMachine.resume(); // продолжить Target
+				}
+			}
+		}
+	}
+
+	private void createReferencesToClassesOfTargetApplication() {
+		System.out.println("Target class not loaded yet. Waiting...");
+		List<ReferenceType> referenceTypes = new ArrayList<ReferenceType>();
+		while (referenceTypes.isEmpty()) {
+			referenceTypes.addAll(virtualMachine.allClasses());
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				continue;
+			}
+		}
+		System.out.println("Loaded " + referenceTypes.size() + " classes.");
+		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream().map(clr -> clr.classLoader())
+				.collect(Collectors.toSet());
+		// classLoaderReferencesSet.stream().filter(clr -> Objects.nonNull(clr)).map(clr
+		// -> clr.toString()).forEach(c -> System.out.println("==> " + c));
+		Set<ClassLoaderReference> qq = classLoaderReferencesSet.stream().filter(c -> Objects.nonNull(c))
+				.collect(Collectors.toSet());
+		List<ReferenceType> targetClasses = new ArrayList<ReferenceType>();
+		for (ClassLoaderReference classLoaderReference : qq) {
+			targetClasses.addAll(classLoaderReference.visibleClasses().stream()
+					.filter(cl -> cl.toString().contains("target.Target")).collect(Collectors.toList()));
+		}
+		this.referencesAtClasses = targetClasses;
+	}
+
+	private void configureVirtualMachine(String host, int port) throws IOException {
+		VirtualMachineManager virtualMachineManager = Bootstrap.virtualMachineManager();
+		AttachingConnector connector = virtualMachineManager.attachingConnectors().stream()
+				.filter(c -> c.name().equals("com.sun.jdi.SocketAttach")).findAny().orElseThrow();
+		Map<String, Connector.Argument> arguments = connector.defaultArguments();
+		arguments.get("hostname").setValue(host);
+		arguments.get("port").setValue(String.valueOf(port));
+		System.out.println("Connecting to " + host + ":" + port + "...");
+		VirtualMachine virtualMachine = null;
+		try {
+			virtualMachine = connector.attach(arguments);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IllegalConnectorArgumentsException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		if (Objects.isNull(virtualMachine))
+			throw new IOException("Could not attach to VM on port " + port);
+		this.virtualMachine = virtualMachine;
+	}
+
+}

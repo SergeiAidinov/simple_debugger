@@ -1,4 +1,4 @@
-package simpledebugger;
+package com.gmail.aydinov.sergey;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
 import com.sun.jdi.Bootstrap;
@@ -27,27 +28,29 @@ import com.sun.jdi.request.EventRequestManager;
 
 public class SimpleDebuggerWorkFlow {
 
-	private static SimpleDebuggerWorkFlow simpleDebuggerWorkFlow = null;
 	private VirtualMachine virtualMachine = null;
 	private List<ReferenceType> referencesAtClasses;
+	private String host;
+	private Integer port;
+	private static final Map<SimpleDebuggerWorkFlowIdentifier, SimpleDebuggerWorkFlow> CACHE = new WeakHashMap<>();
 
-	private SimpleDebuggerWorkFlow() {
-
-	}
-
-	public static SimpleDebuggerWorkFlow instance() {
-		if (Objects.isNull(simpleDebuggerWorkFlow))
-			simpleDebuggerWorkFlow = new SimpleDebuggerWorkFlow();
-		return simpleDebuggerWorkFlow;
-	}
-
-	public void debug(String host, int port) throws IOException {
-		configureVirtualMachine(host, port);
-		System.out.println("Connected to VM: " + virtualMachine.name());
+	private SimpleDebuggerWorkFlow(String host, int port) throws IllegalStateException {
+		try {
+			configureVirtualMachine(host, port);
+		} catch (IOException e) {
+			throw new IllegalStateException();
+		}
 		createReferencesToClassesOfTargetApplication();
+	}
 
+	public static synchronized SimpleDebuggerWorkFlow instanceOfHostAndPort(String host, Integer port) {
+		SimpleDebuggerWorkFlowIdentifier simpleDebuggerWorkFlowidentifier = 
+				new SimpleDebuggerWorkFlowIdentifier(host, port);
+		return CACHE.computeIfAbsent(simpleDebuggerWorkFlowidentifier, k -> new SimpleDebuggerWorkFlow(host, port));
+	}
+
+	public void debug() throws IOException {
 		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
-
 		ReferenceType targetClass = referencesAtClasses.get(0);
 		Method method = targetClass.methodsByName("sayHello").get(0);
 		Location location = method.location();
@@ -61,12 +64,11 @@ public class SimpleDebuggerWorkFlow {
 			try {
 				eventSet = queue.remove();
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			for (Event event : eventSet) {
-				if (event instanceof BreakpointEvent be) {
-					System.out.println("Breakpoint hit at method: " + be.location().method().name());
+				if (event instanceof BreakpointEvent breakpointEvent) {
+					System.out.println("Breakpoint hit at method: " + breakpointEvent.location().method().name());
 					virtualMachine.resume(); // продолжить Target
 				}
 			}
@@ -87,19 +89,17 @@ public class SimpleDebuggerWorkFlow {
 		System.out.println("Loaded " + referenceTypes.size() + " classes.");
 		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream().map(clr -> clr.classLoader())
 				.collect(Collectors.toSet());
-		// classLoaderReferencesSet.stream().filter(clr -> Objects.nonNull(clr)).map(clr
-		// -> clr.toString()).forEach(c -> System.out.println("==> " + c));
-		Set<ClassLoaderReference> qq = classLoaderReferencesSet.stream().filter(c -> Objects.nonNull(c))
+		Set<ClassLoaderReference> classLoaderReferenceSet = classLoaderReferencesSet.stream().filter(c -> Objects.nonNull(c))
 				.collect(Collectors.toSet());
 		List<ReferenceType> targetClasses = new ArrayList<ReferenceType>();
-		for (ClassLoaderReference classLoaderReference : qq) {
+		for (ClassLoaderReference classLoaderReference : classLoaderReferenceSet) {
 			targetClasses.addAll(classLoaderReference.visibleClasses().stream()
 					.filter(cl -> cl.toString().contains("target.Target")).collect(Collectors.toList()));
 		}
 		this.referencesAtClasses = targetClasses;
 	}
 
-	private void configureVirtualMachine(String host, int port) throws IOException {
+	private void configureVirtualMachine(String host, int port) throws IOException{
 		VirtualMachineManager virtualMachineManager = Bootstrap.virtualMachineManager();
 		AttachingConnector connector = virtualMachineManager.attachingConnectors().stream()
 				.filter(c -> c.name().equals("com.sun.jdi.SocketAttach")).findAny().orElseThrow();
@@ -111,15 +111,44 @@ public class SimpleDebuggerWorkFlow {
 		try {
 			virtualMachine = connector.attach(arguments);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IllegalConnectorArgumentsException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		if (Objects.isNull(virtualMachine))
 			throw new IOException("Could not attach to VM on port " + port);
+		System.out.println("Connected to VM: " + virtualMachine.name());
 		this.virtualMachine = virtualMachine;
+	}
+	
+	@Override
+	public String toString() {
+		return "SimpleDebuggerWorkFlow [virtualMachine=" + virtualMachine + ", referencesAtClasses="
+				+ referencesAtClasses + ", host=" + host + ", port=" + port + "]";
+	}
+
+	private static class SimpleDebuggerWorkFlowIdentifier {
+		private String host;
+		private Integer port;
+		public SimpleDebuggerWorkFlowIdentifier(String host, Integer port) {
+			this.host = host;
+			this.port = port;
+		}
+		@Override
+		public int hashCode() {
+			return Objects.hash(host, port);
+		}
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			SimpleDebuggerWorkFlowIdentifier other = (SimpleDebuggerWorkFlowIdentifier) obj;
+			return Objects.equals(host, other.host) && Objects.equals(port, other.port);
+		}
 	}
 
 }

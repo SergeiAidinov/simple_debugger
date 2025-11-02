@@ -1,4 +1,4 @@
-package com.gmail.aydinov.sergey;
+package com.gmail.aydinov.sergey.simpledebugger.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -9,8 +9,12 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
+import javax.xml.stream.util.EventReaderDelegate;
+
+import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.Bootstrap;
 import com.sun.jdi.ClassLoaderReference;
+import com.sun.jdi.Field;
 import com.sun.jdi.Location;
 import com.sun.jdi.Method;
 import com.sun.jdi.ReferenceType;
@@ -30,13 +34,16 @@ public class SimpleDebuggerWorkFlow {
 
 	private VirtualMachine virtualMachine = null;
 	private List<ReferenceType> referencesAtClasses;
+	private Set<Field> fields;
 	private String host;
 	private Integer port;
 	private static final Map<SimpleDebuggerWorkFlowIdentifier, SimpleDebuggerWorkFlow> CACHE = new WeakHashMap<>();
 
 	private SimpleDebuggerWorkFlow(String host, int port) throws IllegalStateException {
+		this.host = host;
+		this.port = port;
 		try {
-			configureVirtualMachine(host, port);
+			configureVirtualMachine();
 		} catch (IOException e) {
 			throw new IllegalStateException();
 		}
@@ -49,9 +56,17 @@ public class SimpleDebuggerWorkFlow {
 		return CACHE.computeIfAbsent(simpleDebuggerWorkFlowidentifier, k -> new SimpleDebuggerWorkFlow(host, port));
 	}
 
-	public void debug() throws IOException {
+	public void debug() throws IOException, AbsentInformationException {
 		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
+		System.out.println(">>>" + referencesAtClasses.size());
+		for (ReferenceType referenceType : referencesAtClasses) {
+			System.out.println("==> " + referenceType);
+			fields = referenceType.allFields().stream().collect(Collectors.toSet());
+		}
+		fields.stream().forEach(f -> System.out.println(f));
 		ReferenceType targetClass = referencesAtClasses.get(0);
+		
+		
 		Method method = targetClass.methodsByName("sayHello").get(0);
 		Location location = method.location();
 		BreakpointRequest bpReq = eventRequestManager.createBreakpointRequest(location);
@@ -94,12 +109,12 @@ public class SimpleDebuggerWorkFlow {
 		List<ReferenceType> targetClasses = new ArrayList<ReferenceType>();
 		for (ClassLoaderReference classLoaderReference : classLoaderReferenceSet) {
 			targetClasses.addAll(classLoaderReference.visibleClasses().stream()
-					.filter(cl -> cl.toString().contains("target.Target")).collect(Collectors.toList()));
+					.filter(cl -> cl.toString().contains("target")).collect(Collectors.toList()));
 		}
 		this.referencesAtClasses = targetClasses;
 	}
 
-	private void configureVirtualMachine(String host, int port) throws IOException{
+	private void configureVirtualMachine() throws IOException{
 		VirtualMachineManager virtualMachineManager = Bootstrap.virtualMachineManager();
 		AttachingConnector connector = virtualMachineManager.attachingConnectors().stream()
 				.filter(c -> c.name().equals("com.sun.jdi.SocketAttach")).findAny().orElseThrow();

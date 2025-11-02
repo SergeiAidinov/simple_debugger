@@ -1,4 +1,4 @@
-package com.gmail.aydinov.sergey;
+package com.gmail.aydinov.sergey.simpledebugger.core;
 
 import java.io.IOException;
 

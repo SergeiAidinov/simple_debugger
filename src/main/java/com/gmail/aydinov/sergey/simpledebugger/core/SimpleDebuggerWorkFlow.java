@@ -11,14 +11,20 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.xml.stream.util.EventReaderDelegate;
 
-import com.gmail.aydinov.sergey.simpledebugger.dto.ReferenceInfo;
+import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationClassRepresentation;
+import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementRepresentation;
+import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementType;
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.Bootstrap;
 import com.sun.jdi.ClassLoaderReference;
+import com.sun.jdi.ClassObjectReference;
+import com.sun.jdi.ClassType;
 import com.sun.jdi.Field;
+import com.sun.jdi.InterfaceType;
 import com.sun.jdi.Location;
 import com.sun.jdi.Method;
 import com.sun.jdi.ReferenceType;
@@ -37,10 +43,10 @@ import com.sun.jdi.request.EventRequestManager;
 public class SimpleDebuggerWorkFlow {
 
 	private VirtualMachine virtualMachine = null;
-	private final Map<ReferenceType, ReferenceInfo> referencesAtClasses = new HashMap<ReferenceType, ReferenceInfo>();
-	//private List<ReferenceType> fields;
+	private final Map<ReferenceType, TargetApplicationElementRepresentation> referencesAtClasses = new HashMap<>();
 	private String host;
 	private Integer port;
+	private Method method = null;
 	private static final Map<SimpleDebuggerWorkFlowIdentifier, SimpleDebuggerWorkFlow> CACHE = new WeakHashMap<>();
 
 	private SimpleDebuggerWorkFlow(String host, int port) throws IllegalStateException {
@@ -55,30 +61,26 @@ public class SimpleDebuggerWorkFlow {
 	}
 
 	public static synchronized SimpleDebuggerWorkFlow instanceOfHostAndPort(String host, Integer port) {
-		SimpleDebuggerWorkFlowIdentifier simpleDebuggerWorkFlowidentifier = 
-				new SimpleDebuggerWorkFlowIdentifier(host, port);
+		SimpleDebuggerWorkFlowIdentifier simpleDebuggerWorkFlowidentifier = new SimpleDebuggerWorkFlowIdentifier(host,
+				port);
 		return CACHE.computeIfAbsent(simpleDebuggerWorkFlowidentifier, k -> new SimpleDebuggerWorkFlow(host, port));
 	}
 
 	public void debug() throws IOException, AbsentInformationException {
 		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
 		System.out.println(">>>" + referencesAtClasses.size());
-		Method method = null;
-		for (Entry<ReferenceType, ReferenceInfo> entry : referencesAtClasses.entrySet()) {
+
+		for (Entry<ReferenceType, TargetApplicationElementRepresentation> entry : referencesAtClasses
+				.entrySet()) {
 			System.out.println("==> " + entry);
-			entry.getValue().getFields().forEach(v -> System.out.println(v));
-			entry.getValue().getMethods().forEach(v -> System.out.println(v));
-			method = 
-					//entry.getValue().getMethods().stream().forEach(m -> System.out.println(m.toString()));
-					entry.getValue().getMethods().stream().filter(m -> m.name().contains("sayHello")).findAny().get();
+			// entry.getValue().getFields().forEach(v -> System.out.println(v));
+			// entry.getValue().getMethods().forEach(v -> System.out.println(v));
+			// method =
+			// entry.getValue().getMethods().stream().forEach(m ->
+			// System.out.println(m.toString()));
+			entry.getValue().getMethods().stream().filter(m -> m.name().contains("sayHello")).findAny()
+					.ifPresent(m -> initMethod(m));
 		}
-		/*
-		 * fields.stream().forEach(f -> System.out.println(f)); ReferenceType
-		 * targetClass = referencesAtClasses.get(0);
-		 */
-		
-		
-		//Method method = targetClass.methodsByName("sayHello").get(0);
 		Location location = method.location();
 		BreakpointRequest bpReq = eventRequestManager.createBreakpointRequest(location);
 		bpReq.enable();
@@ -95,10 +97,20 @@ public class SimpleDebuggerWorkFlow {
 			for (Event event : eventSet) {
 				if (event instanceof BreakpointEvent breakpointEvent) {
 					System.out.println("Breakpoint hit at method: " + breakpointEvent.location().method().name());
+					// getTargetApplicationStatus().stream().forEach(s ->
+					// System.out.println(s.toString()));
 					virtualMachine.resume(); // продолжить Target
 				}
 			}
 		}
+	}
+
+	private void initMethod(Method m) {
+		method = m;
+	}
+
+	public List<? extends TargetApplicationElementRepresentation> getTargetApplicationStatus() {
+		return referencesAtClasses.values().stream().collect(Collectors.toList());
 	}
 
 	private void createReferencesToClassesOfTargetApplication() {
@@ -113,34 +125,33 @@ public class SimpleDebuggerWorkFlow {
 			}
 		}
 		System.out.println("Loaded " + referenceTypes.size() + " classes.");
-		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream()
-				.filter(clr -> Objects.nonNull(clr))
-				.map(clr -> clr.classLoader())
-				.filter(c -> Objects.nonNull(c))
-				//.filter(cl -> cl.toString().contains("target"))
-				.collect(Collectors.toSet());
-//		Set<ClassLoaderReference> classLoaderReferenceSet = classLoaderReferencesSet.stream().filter(c -> Objects.nonNull(c))
-//				.collect(Collectors.toSet());
+		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream().filter(clr -> Objects.nonNull(clr))
+				.map(clr -> clr.classLoader()).filter(c -> Objects.nonNull(c)).collect(Collectors.toSet());
 		List<ReferenceType> targetClasses = new ArrayList<ReferenceType>();
 		for (ClassLoaderReference classLoaderReference : classLoaderReferencesSet) {
-//			targetClasses.addAll(classLoaderReference.visibleClasses().stream()
-//					.filter(cl -> cl.toString().contains("target")).collect(Collectors.toList()));
-			if (classLoaderReference.visibleClasses().stream()
-			.filter(cl -> cl.toString().contains("target")).collect(Collectors.toList()).isEmpty()) continue;
-			
+
+			if (classLoaderReference.visibleClasses().stream().filter(cl -> cl.toString().contains("target")
+			// || cl.toString().contains("eclipse")
+			).collect(Collectors.toList()).isEmpty())
+				continue;
+
 			List<ReferenceType> references = classLoaderReference.definedClasses();
 			for (ReferenceType referenceType : references) {
-				Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
-				Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
-				referencesAtClasses.put(referenceType, new ReferenceInfo(methods, fields));
-				
+				if (referenceType instanceof ClassType) {
+					Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
+					Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
+					referencesAtClasses.put(referenceType, new TargetApplicationClassRepresentation(
+							referenceType.name(), TargetApplicationElementType.CLASS, methods, fields));
+					
+					  } else if (references instanceof InterfaceType) {
+					  
+					  }
 			}
 		}
 		System.out.println("referencesAtClasses: " + referencesAtClasses.size());
-		//this.referencesAtClasses = targetClasses;
 	}
 
-	private void configureVirtualMachine() throws IOException{
+	private void configureVirtualMachine() throws IOException {
 		VirtualMachineManager virtualMachineManager = Bootstrap.virtualMachineManager();
 		AttachingConnector connector = virtualMachineManager.attachingConnectors().stream()
 				.filter(c -> c.name().equals("com.sun.jdi.SocketAttach")).findAny().orElseThrow();
@@ -161,7 +172,7 @@ public class SimpleDebuggerWorkFlow {
 		System.out.println("Connected to VM: " + virtualMachine.name());
 		this.virtualMachine = virtualMachine;
 	}
-	
+
 	@Override
 	public String toString() {
 		return "SimpleDebuggerWorkFlow [virtualMachine=" + virtualMachine + ", referencesAtClasses="
@@ -171,14 +182,17 @@ public class SimpleDebuggerWorkFlow {
 	private static class SimpleDebuggerWorkFlowIdentifier {
 		private String host;
 		private Integer port;
+
 		public SimpleDebuggerWorkFlowIdentifier(String host, Integer port) {
 			this.host = host;
 			this.port = port;
 		}
+
 		@Override
 		public int hashCode() {
 			return Objects.hash(host, port);
 		}
+
 		@Override
 		public boolean equals(Object obj) {
 			if (this == obj)

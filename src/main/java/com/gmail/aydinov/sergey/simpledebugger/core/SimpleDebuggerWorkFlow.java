@@ -70,9 +70,9 @@ public class SimpleDebuggerWorkFlow {
 				.values()) {
 			System.out.println("==> " + targetApplicationElementRepresentation.prettyPrint());
 			if (targetApplicationElementRepresentation.getTargetApplicationElementType()
-					.equals(TargetApplicationElementType.CLASS)) {
-				targetApplicationElementRepresentation.getMethods().stream().filter(m -> m.name().contains("sayHello"))
-						.findAny().ifPresent(m -> initMethod(m));
+					.equals(TargetApplicationElementType.CLASS) && Objects.isNull(method)) {
+				method = targetApplicationElementRepresentation.getMethods().stream()
+						.filter(m -> m.name().contains("sayHello")).findAny().orElse(null);
 			}
 		}
 		Location location = method.location();

@@ -2,8 +2,11 @@ package com.gmail.aydinov.sergey.simpledebugger.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -11,6 +14,7 @@ import java.util.stream.Collectors;
 
 import javax.xml.stream.util.EventReaderDelegate;
 
+import com.gmail.aydinov.sergey.simpledebugger.dto.ReferenceInfo;
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.Bootstrap;
 import com.sun.jdi.ClassLoaderReference;
@@ -33,8 +37,8 @@ import com.sun.jdi.request.EventRequestManager;
 public class SimpleDebuggerWorkFlow {
 
 	private VirtualMachine virtualMachine = null;
-	private List<ReferenceType> referencesAtClasses;
-	private Set<Field> fields;
+	private final Map<ReferenceType, ReferenceInfo> referencesAtClasses = new HashMap<ReferenceType, ReferenceInfo>();
+	//private List<ReferenceType> fields;
 	private String host;
 	private Integer port;
 	private static final Map<SimpleDebuggerWorkFlowIdentifier, SimpleDebuggerWorkFlow> CACHE = new WeakHashMap<>();
@@ -59,15 +63,22 @@ public class SimpleDebuggerWorkFlow {
 	public void debug() throws IOException, AbsentInformationException {
 		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
 		System.out.println(">>>" + referencesAtClasses.size());
-		for (ReferenceType referenceType : referencesAtClasses) {
-			System.out.println("==> " + referenceType);
-			fields = referenceType.allFields().stream().collect(Collectors.toSet());
+		Method method = null;
+		for (Entry<ReferenceType, ReferenceInfo> entry : referencesAtClasses.entrySet()) {
+			System.out.println("==> " + entry);
+			entry.getValue().getFields().forEach(v -> System.out.println(v));
+			entry.getValue().getMethods().forEach(v -> System.out.println(v));
+			method = 
+					//entry.getValue().getMethods().stream().forEach(m -> System.out.println(m.toString()));
+					entry.getValue().getMethods().stream().filter(m -> m.name().contains("sayHello")).findAny().get();
 		}
-		fields.stream().forEach(f -> System.out.println(f));
-		ReferenceType targetClass = referencesAtClasses.get(0);
+		/*
+		 * fields.stream().forEach(f -> System.out.println(f)); ReferenceType
+		 * targetClass = referencesAtClasses.get(0);
+		 */
 		
 		
-		Method method = targetClass.methodsByName("sayHello").get(0);
+		//Method method = targetClass.methodsByName("sayHello").get(0);
 		Location location = method.location();
 		BreakpointRequest bpReq = eventRequestManager.createBreakpointRequest(location);
 		bpReq.enable();
@@ -102,16 +113,31 @@ public class SimpleDebuggerWorkFlow {
 			}
 		}
 		System.out.println("Loaded " + referenceTypes.size() + " classes.");
-		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream().map(clr -> clr.classLoader())
+		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream()
+				.filter(clr -> Objects.nonNull(clr))
+				.map(clr -> clr.classLoader())
+				.filter(c -> Objects.nonNull(c))
+				//.filter(cl -> cl.toString().contains("target"))
 				.collect(Collectors.toSet());
-		Set<ClassLoaderReference> classLoaderReferenceSet = classLoaderReferencesSet.stream().filter(c -> Objects.nonNull(c))
-				.collect(Collectors.toSet());
+//		Set<ClassLoaderReference> classLoaderReferenceSet = classLoaderReferencesSet.stream().filter(c -> Objects.nonNull(c))
+//				.collect(Collectors.toSet());
 		List<ReferenceType> targetClasses = new ArrayList<ReferenceType>();
-		for (ClassLoaderReference classLoaderReference : classLoaderReferenceSet) {
-			targetClasses.addAll(classLoaderReference.visibleClasses().stream()
-					.filter(cl -> cl.toString().contains("target")).collect(Collectors.toList()));
+		for (ClassLoaderReference classLoaderReference : classLoaderReferencesSet) {
+//			targetClasses.addAll(classLoaderReference.visibleClasses().stream()
+//					.filter(cl -> cl.toString().contains("target")).collect(Collectors.toList()));
+			if (classLoaderReference.visibleClasses().stream()
+			.filter(cl -> cl.toString().contains("target")).collect(Collectors.toList()).isEmpty()) continue;
+			
+			List<ReferenceType> references = classLoaderReference.definedClasses();
+			for (ReferenceType referenceType : references) {
+				Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
+				Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
+				referencesAtClasses.put(referenceType, new ReferenceInfo(methods, fields));
+				
+			}
 		}
-		this.referencesAtClasses = targetClasses;
+		System.out.println("referencesAtClasses: " + referencesAtClasses.size());
+		//this.referencesAtClasses = targetClasses;
 	}
 
 	private void configureVirtualMachine() throws IOException{

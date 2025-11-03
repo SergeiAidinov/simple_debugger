@@ -1,28 +1,23 @@
 package com.gmail.aydinov.sergey.simpledebugger.core;
 
+import java.awt.desktop.OpenFilesEvent;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import javax.xml.stream.util.EventReaderDelegate;
-
-import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationClassRepresentation;
+import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationClassOrInterfaceRepresentation;
 import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementRepresentation;
 import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementType;
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.Bootstrap;
-import com.sun.jdi.ClassLoaderReference;
-import com.sun.jdi.ClassObjectReference;
 import com.sun.jdi.ClassType;
 import com.sun.jdi.Field;
 import com.sun.jdi.InterfaceType;
@@ -71,16 +66,14 @@ public class SimpleDebuggerWorkFlow {
 		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
 		System.out.println("referencesAtClassesAndInterfaces.size: " + referencesAtClassesAndInterfaces.size());
 
-		for (Entry<ReferenceType, TargetApplicationElementRepresentation> entry : referencesAtClassesAndInterfaces
-				.entrySet()) {
-			System.out.println("==> " + entry);
-			// entry.getValue().getFields().forEach(v -> System.out.println(v));
-			// entry.getValue().getMethods().forEach(v -> System.out.println(v));
-			// method =
-			// entry.getValue().getMethods().stream().forEach(m ->
-			// System.out.println(m.toString()));
-			entry.getValue().getMethods().stream().filter(m -> m.name().contains("sayHello")).findAny()
-					.ifPresent(m -> initMethod(m));
+		for (TargetApplicationElementRepresentation targetApplicationElementRepresentation : referencesAtClassesAndInterfaces
+				.values()) {
+			System.out.println("==> " + targetApplicationElementRepresentation.prettyPrint());
+			if (targetApplicationElementRepresentation.getTargetApplicationElementType()
+					.equals(TargetApplicationElementType.CLASS)) {
+				targetApplicationElementRepresentation.getMethods().stream().filter(m -> m.name().contains("sayHello"))
+						.findAny().ifPresent(m -> initMethod(m));
+			}
 		}
 		Location location = method.location();
 		BreakpointRequest bpReq = eventRequestManager.createBreakpointRequest(location);
@@ -98,8 +91,6 @@ public class SimpleDebuggerWorkFlow {
 			for (Event event : eventSet) {
 				if (event instanceof BreakpointEvent breakpointEvent) {
 					System.out.println("Breakpoint hit at method: " + breakpointEvent.location().method().name());
-					// getTargetApplicationStatus().stream().forEach(s ->
-					// System.out.println(s.toString()));
 					virtualMachine.resume(); // продолжить Target
 				}
 			}
@@ -125,37 +116,25 @@ public class SimpleDebuggerWorkFlow {
 				continue;
 			}
 		}
-
-		 loadedClassesAndInterfaces = loadedClassesAndInterfaces.stream().filter(lci
-		 -> lci.name().contains("target")).toList();
+		loadedClassesAndInterfaces = loadedClassesAndInterfaces.stream().filter(lci -> lci.name().contains("target"))
+				.toList();
 		System.out.println("Loaded " + loadedClassesAndInterfaces.size() + " classes.");
-
-		Set<ClassLoaderReference> classLoaderReferencesSet = loadedClassesAndInterfaces.stream()
-				.filter(clr -> Objects.nonNull(clr)).map(clr -> clr.classLoader()).filter(clr -> Objects.nonNull(clr))
-				//.filter(clr -> clr.visibleClasses().stream().anyMatch(cl -> cl.toString().contains("target")))
-				.collect(Collectors.toSet());
-
-		for (ClassLoaderReference classLoaderReference : classLoaderReferencesSet) {
-			List<ReferenceType> references = classLoaderReference.definedClasses();
-			for (ReferenceType referenceType : references) {
-				if (referenceType instanceof ClassType) {
-					Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
-					Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
-					referencesAtClassesAndInterfaces.put(referenceType, new TargetApplicationClassRepresentation(
-							referenceType.name(), TargetApplicationElementType.CLASS, methods, fields));
-				}
+		Set<ReferenceType> references = loadedClassesAndInterfaces.stream().filter(clr -> Objects.nonNull(clr))
+				.map(clr -> clr.classLoader()).filter(clr -> Objects.nonNull(clr))
+				.flatMap(rt -> rt.definedClasses().stream()).collect(Collectors.toSet());
+		Optional<TargetApplicationElementType> targetApplicationElementTypeOptional;
+		for (ReferenceType referenceType : references) {
+			targetApplicationElementTypeOptional = Optional.empty();
+			if (referenceType instanceof ClassType) {
+				targetApplicationElementTypeOptional = Optional.of(TargetApplicationElementType.CLASS);
+			} else if (referenceType instanceof InterfaceType) {
+				targetApplicationElementTypeOptional = Optional.of(TargetApplicationElementType.INTERFACE);
 			}
+			targetApplicationElementTypeOptional.ifPresent(type -> referencesAtClassesAndInterfaces.put(referenceType,
+					new TargetApplicationClassOrInterfaceRepresentation(referenceType.name(), type,
+							referenceType.allMethods().stream().collect(Collectors.toSet()),
+							referenceType.allFields().stream().collect(Collectors.toSet()))));
 		}
-
-		for (ReferenceType referenceType : loadedClassesAndInterfaces) {
-			if (referenceType instanceof InterfaceType) {
-				Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
-				Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
-				referencesAtClassesAndInterfaces.put(referenceType, new TargetApplicationClassRepresentation(
-						referenceType.name(), TargetApplicationElementType.INTERFACE, methods, fields));
-			}
-		}
-
 		System.out.println("referencesAtClasses: " + referencesAtClassesAndInterfaces.size());
 	}
 

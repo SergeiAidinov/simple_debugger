@@ -1,19 +1,20 @@
 package com.gmail.aydinov.sergey.simpledebugger.dto;
 
+import java.util.Comparator;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import com.sun.jdi.ClassType;
 import com.sun.jdi.Field;
 import com.sun.jdi.Method;
 
-public class TargetApplicationClassRepresentation implements TargetApplicationElementRepresentation {
+public class TargetApplicationClassOrInterfaceRepresentation implements TargetApplicationElementRepresentation {
 
 	private final String targetApplicationElementName;
 	private final TargetApplicationElementType targetApplicationElementType;
 	private final Set<com.sun.jdi.Method> methods;
 	private final Set<com.sun.jdi.Field> fields;
 
-	public TargetApplicationClassRepresentation(String targetApplicationElementName,
+	public TargetApplicationClassOrInterfaceRepresentation(String targetApplicationElementName,
 			TargetApplicationElementType targetApplicationElementType, Set<Method> methods, Set<Field> fields) {
 		this.targetApplicationElementName = targetApplicationElementName;
 		this.targetApplicationElementType = targetApplicationElementType;
@@ -28,7 +29,7 @@ public class TargetApplicationClassRepresentation implements TargetApplicationEl
 	public Set<com.sun.jdi.Field> getFields() {
 		return fields;
 	}
-	
+
 	public String getTargetApplicationElementName() {
 		return targetApplicationElementName;
 	}
@@ -38,23 +39,25 @@ public class TargetApplicationClassRepresentation implements TargetApplicationEl
 	}
 
 	public String prettyPrint() {
-		String meth = methods.stream().map(m -> m.name() + "(" + String.join(", ", m.argumentTypeNames()) + ")")
-				.sorted().collect(java.util.stream.Collectors.joining("\n    "));
+		String methodsPretty = methods.stream().sorted(Comparator.comparing(Method::name))
+				.map(m -> "    " + String.format("%-30s", m.name()) + "  " + m.signature())
+				.collect(Collectors.joining("\n"));
 
-		String fld = fields.stream().map(f -> f.typeName() + " " + f.name()).sorted()
-				.collect(java.util.stream.Collectors.joining("\n    "));
+		String fieldsPretty = fields.stream().sorted(Comparator.comparing(Field::name))
+				.map(f -> "    " + String.format("%-30s", f.name()) + "  " + f.typeName())
+				.collect(Collectors.joining("\n"));
 
-		StringBuilder sb = new StringBuilder();
-		// sb.append("Class: ").append(className).append("\n");
-		// sb.append("Loader: ").append(classLoaderName).append("\n\n");
+		return """
+				TargetApplicationElement {
+				  name  = '%s'
+				  type  = %s
 
-		sb.append("Methods(").append(methods.size()).append("):\n");
-		sb.append("    ").append(meth).append("\n\n");
+				  methods:
+				%s
 
-		sb.append("Fields(").append(fields.size()).append("):\n");
-		sb.append("    ").append(fld);
-
-		return sb.toString();
+				  fields:
+				%s
+				}
+				""".formatted(targetApplicationElementName, targetApplicationElementType, methodsPretty, fieldsPretty);
 	}
-
 }

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -43,7 +44,7 @@ import com.sun.jdi.request.EventRequestManager;
 public class SimpleDebuggerWorkFlow {
 
 	private VirtualMachine virtualMachine = null;
-	private final Map<ReferenceType, TargetApplicationElementRepresentation> referencesAtClasses = new HashMap<>();
+	private final Map<ReferenceType, TargetApplicationElementRepresentation> referencesAtClassesAndInterfaces = new HashMap<>();
 	private String host;
 	private Integer port;
 	private Method method = null;
@@ -68,9 +69,9 @@ public class SimpleDebuggerWorkFlow {
 
 	public void debug() throws IOException, AbsentInformationException {
 		EventRequestManager eventRequestManager = virtualMachine.eventRequestManager();
-		System.out.println(">>>" + referencesAtClasses.size());
+		System.out.println("referencesAtClassesAndInterfaces.size: " + referencesAtClassesAndInterfaces.size());
 
-		for (Entry<ReferenceType, TargetApplicationElementRepresentation> entry : referencesAtClasses
+		for (Entry<ReferenceType, TargetApplicationElementRepresentation> entry : referencesAtClassesAndInterfaces
 				.entrySet()) {
 			System.out.println("==> " + entry);
 			// entry.getValue().getFields().forEach(v -> System.out.println(v));
@@ -110,45 +111,52 @@ public class SimpleDebuggerWorkFlow {
 	}
 
 	public List<? extends TargetApplicationElementRepresentation> getTargetApplicationStatus() {
-		return referencesAtClasses.values().stream().collect(Collectors.toList());
+		return referencesAtClassesAndInterfaces.values().stream().collect(Collectors.toList());
 	}
 
 	private void createReferencesToClassesOfTargetApplication() {
 		System.out.println("Target class not loaded yet. Waiting...");
-		List<ReferenceType> referenceTypes = new ArrayList<ReferenceType>();
-		while (referenceTypes.isEmpty()) {
-			referenceTypes.addAll(virtualMachine.allClasses());
+		List<ReferenceType> loadedClassesAndInterfaces = new ArrayList<ReferenceType>();
+		while (loadedClassesAndInterfaces.isEmpty()) {
+			loadedClassesAndInterfaces.addAll(virtualMachine.allClasses());
 			try {
 				Thread.sleep(1000);
 			} catch (InterruptedException e) {
 				continue;
 			}
 		}
-		System.out.println("Loaded " + referenceTypes.size() + " classes.");
-		Set<ClassLoaderReference> classLoaderReferencesSet = referenceTypes.stream().filter(clr -> Objects.nonNull(clr))
-				.map(clr -> clr.classLoader()).filter(c -> Objects.nonNull(c)).collect(Collectors.toSet());
-		List<ReferenceType> targetClasses = new ArrayList<ReferenceType>();
+
+		 loadedClassesAndInterfaces = loadedClassesAndInterfaces.stream().filter(lci
+		 -> lci.name().contains("target")).toList();
+		System.out.println("Loaded " + loadedClassesAndInterfaces.size() + " classes.");
+
+		Set<ClassLoaderReference> classLoaderReferencesSet = loadedClassesAndInterfaces.stream()
+				.filter(clr -> Objects.nonNull(clr)).map(clr -> clr.classLoader()).filter(clr -> Objects.nonNull(clr))
+				//.filter(clr -> clr.visibleClasses().stream().anyMatch(cl -> cl.toString().contains("target")))
+				.collect(Collectors.toSet());
+
 		for (ClassLoaderReference classLoaderReference : classLoaderReferencesSet) {
-
-			if (classLoaderReference.visibleClasses().stream().filter(cl -> cl.toString().contains("target")
-			// || cl.toString().contains("eclipse")
-			).collect(Collectors.toList()).isEmpty())
-				continue;
-
 			List<ReferenceType> references = classLoaderReference.definedClasses();
 			for (ReferenceType referenceType : references) {
 				if (referenceType instanceof ClassType) {
 					Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
 					Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
-					referencesAtClasses.put(referenceType, new TargetApplicationClassRepresentation(
+					referencesAtClassesAndInterfaces.put(referenceType, new TargetApplicationClassRepresentation(
 							referenceType.name(), TargetApplicationElementType.CLASS, methods, fields));
-					
-					  } else if (references instanceof InterfaceType) {
-					  
-					  }
+				}
 			}
 		}
-		System.out.println("referencesAtClasses: " + referencesAtClasses.size());
+
+		for (ReferenceType referenceType : loadedClassesAndInterfaces) {
+			if (referenceType instanceof InterfaceType) {
+				Set<Field> fields = referenceType.allFields().stream().collect(Collectors.toSet());
+				Set<Method> methods = referenceType.allMethods().stream().collect(Collectors.toSet());
+				referencesAtClassesAndInterfaces.put(referenceType, new TargetApplicationClassRepresentation(
+						referenceType.name(), TargetApplicationElementType.INTERFACE, methods, fields));
+			}
+		}
+
+		System.out.println("referencesAtClasses: " + referencesAtClassesAndInterfaces.size());
 	}
 
 	private void configureVirtualMachine() throws IOException {
@@ -176,7 +184,7 @@ public class SimpleDebuggerWorkFlow {
 	@Override
 	public String toString() {
 		return "SimpleDebuggerWorkFlow [virtualMachine=" + virtualMachine + ", referencesAtClasses="
-				+ referencesAtClasses + ", host=" + host + ", port=" + port + "]";
+				+ referencesAtClassesAndInterfaces + ", host=" + host + ", port=" + port + "]";
 	}
 
 	private static class SimpleDebuggerWorkFlowIdentifier {

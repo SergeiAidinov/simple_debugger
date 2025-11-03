@@ -2,25 +2,25 @@ package com.gmail.aydinov.sergey.simpledebugger.dto;
 
 import java.util.Set;
 
-import com.sun.jdi.ClassType;
 import com.sun.jdi.Field;
 import com.sun.jdi.Method;
 
-public class TargetApplicationClassRepresentation implements TargetApplicationElementRepresentation {
-
+public class TargetApplicationInterfaceRepresentation implements TargetApplicationElementRepresentation {
+	
 	private final String targetApplicationElementName;
 	private final TargetApplicationElementType targetApplicationElementType;
 	private final Set<com.sun.jdi.Method> methods;
 	private final Set<com.sun.jdi.Field> fields;
-
-	public TargetApplicationClassRepresentation(String targetApplicationElementName,
+	
+	public TargetApplicationInterfaceRepresentation(String targetApplicationElementName,
 			TargetApplicationElementType targetApplicationElementType, Set<Method> methods, Set<Field> fields) {
+		super();
 		this.targetApplicationElementName = targetApplicationElementName;
 		this.targetApplicationElementType = targetApplicationElementType;
 		this.methods = methods;
 		this.fields = fields;
 	}
-
+	
 	public Set<com.sun.jdi.Method> getMethods() {
 		return methods;
 	}
@@ -35,26 +35,6 @@ public class TargetApplicationClassRepresentation implements TargetApplicationEl
 
 	public TargetApplicationElementType getTargetApplicationElementType() {
 		return targetApplicationElementType;
-	}
-
-	public String prettyPrint() {
-		String meth = methods.stream().map(m -> m.name() + "(" + String.join(", ", m.argumentTypeNames()) + ")")
-				.sorted().collect(java.util.stream.Collectors.joining("\n    "));
-
-		String fld = fields.stream().map(f -> f.typeName() + " " + f.name()).sorted()
-				.collect(java.util.stream.Collectors.joining("\n    "));
-
-		StringBuilder sb = new StringBuilder();
-		// sb.append("Class: ").append(className).append("\n");
-		// sb.append("Loader: ").append(classLoaderName).append("\n\n");
-
-		sb.append("Methods(").append(methods.size()).append("):\n");
-		sb.append("    ").append(meth).append("\n\n");
-
-		sb.append("Fields(").append(fields.size()).append("):\n");
-		sb.append("    ").append(fld);
-
-		return sb.toString();
 	}
 
 }

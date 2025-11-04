@@ -1,12 +1,10 @@
 package com.gmail.aydinov.sergey.simpledebugger.core;
 
-import java.awt.desktop.OpenFilesEvent;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -19,11 +17,14 @@ import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementType;
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.Bootstrap;
 import com.sun.jdi.ClassType;
-import com.sun.jdi.Field;
+import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.InterfaceType;
+import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Location;
 import com.sun.jdi.Method;
 import com.sun.jdi.ReferenceType;
+import com.sun.jdi.StackFrame;
+import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.VirtualMachineManager;
 import com.sun.jdi.connect.AttachingConnector;
@@ -75,9 +76,16 @@ public class SimpleDebuggerWorkFlow {
 						.filter(m -> m.name().contains("sayHello")).findAny().orElse(null);
 			}
 		}
-		Location location = method.location();
-		BreakpointRequest bpReq = eventRequestManager.createBreakpointRequest(location);
-		bpReq.enable();
+		/*
+		 * Location location = method.location(); BreakpointRequest bpReq =
+		 * eventRequestManager.createBreakpointRequest(location); bpReq.enable();
+		 */
+		Optional<Location> loc = findLocation(method, 29);
+		loc.ifPresent(l -> {
+		    BreakpointRequest bp = eventRequestManager.createBreakpointRequest(l);
+		    bp.enable();
+		});
+
 		EventQueue queue = virtualMachine.eventQueue();
 		System.out.println("Waiting for events...");
 
@@ -91,15 +99,36 @@ public class SimpleDebuggerWorkFlow {
 			for (Event event : eventSet) {
 				if (event instanceof BreakpointEvent breakpointEvent) {
 					System.out.println("Breakpoint hit at method: " + breakpointEvent.location().method().name());
-					virtualMachine.resume(); // продолжить Target
+					BreakpointEvent bp = (BreakpointEvent) event;
+					StackFrame frame = null;
+					try {
+						frame = bp.thread().frame(0);
+					} catch (IncompatibleThreadStateException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					Map<LocalVariable, Value> values = frame.getValues(frame.visibleVariables());
+					values.values().stream().forEach(v -> System.out.println(v));
+					virtualMachine.resume();
 				}
 			}
 		}
 	}
-
-	private void initMethod(Method m) {
-		method = m;
+	
+	public Optional<Location> findLocation(Method method, int sourceLine) {
+	    try {
+	        for (Location l : method.allLineLocations()) {
+	            if (l.lineNumber() == sourceLine) {
+	                return Optional.of(l);
+	            }
+	        }
+	    } catch (AbsentInformationException e) {
+	        // в этом случае исходники не доступны: метод скомпилирован без -g
+	        return Optional.empty();
+	    }
+	    return Optional.empty();
 	}
+
 
 	public List<? extends TargetApplicationElementRepresentation> getTargetApplicationStatus() {
 		return referencesAtClassesAndInterfaces.values().stream().collect(Collectors.toList());

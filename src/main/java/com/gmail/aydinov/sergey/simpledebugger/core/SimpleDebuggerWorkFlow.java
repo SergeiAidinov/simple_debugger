@@ -2,6 +2,7 @@ package com.gmail.aydinov.sergey.simpledebugger.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
+import com.gmail.aydinov.sergey.simpledebugger.dto.SimpleDebuggerBreakpointInfo;
 import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationClassOrInterfaceRepresentation;
 import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementRepresentation;
 import com.gmail.aydinov.sergey.simpledebugger.dto.TargetApplicationElementType;
@@ -37,7 +39,7 @@ import com.sun.jdi.event.EventSet;
 import com.sun.jdi.request.BreakpointRequest;
 import com.sun.jdi.request.EventRequestManager;
 
-public class SimpleDebuggerWorkFlow {
+public class SimpleDebuggerWorkFlow implements SimpleDebuggerBreakpointProvider {
 
 	private VirtualMachine virtualMachine = null;
 	private final Map<ReferenceType, TargetApplicationElementRepresentation> referencesAtClassesAndInterfaces = new HashMap<>();
@@ -61,6 +63,36 @@ public class SimpleDebuggerWorkFlow {
 		SimpleDebuggerWorkFlowIdentifier simpleDebuggerWorkFlowidentifier = new SimpleDebuggerWorkFlowIdentifier(host,
 				port);
 		return CACHE.computeIfAbsent(simpleDebuggerWorkFlowidentifier, k -> new SimpleDebuggerWorkFlow(host, port));
+	}
+	
+	@Override
+	public List<SimpleDebuggerBreakpointInfo> getBreakpoints() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void addBreakpoint(SimpleDebuggerBreakpointInfo breakpoint) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void addBreakpoints(Collection<SimpleDebuggerBreakpointInfo> breakpoints) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void removeBreakpoint(SimpleDebuggerBreakpointInfo breakpoint) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void removeBreakpoints(Collection<SimpleDebuggerBreakpointInfo> breakpoints) {
+		// TODO Auto-generated method stub
+		
 	}
 
 	public void debug() throws IOException, AbsentInformationException {
